@@ -1,0 +1,19 @@
+2025-03-18 10:31:09,783 - INFO - User 'Alice' subscribed to 'Inception' successfully!
+2025-03-18 10:45:40,487 - INFO - Notification: User 'Alice', a new review has been added for Media ID 1.
+2025-03-18 10:45:40,488 - INFO - Review Details: User 'Alice' reviewed 'Inception' with Rating 5: Amazing movie!
+2025-03-18 10:47:41,138 - INFO - Notification: User 'Alice', a new review has been added for Media ID 1.
+2025-03-18 10:47:41,138 - INFO - Review Details: User 'Bob' reviewed 'Inception' with Rating 4: Must Watch!
+2025-03-18 10:54:17,024 - INFO - Notification: User 'Alice', a new review has been added for Media ID 1.
+2025-03-18 10:54:17,025 - INFO - Review Details: User 'Bob' reviewed 'Inception' with Rating 4: Go for it
+2025-03-18 11:17:20,390 - INFO - Notification: User 'Alice', a new review has been added for Media ID 1.
+2025-03-18 11:17:20,390 - INFO - Review Details: User 'Alice' reviewed 'Inception' with Rating 5: Amazing movie!
+2025-03-18 11:17:20,402 - INFO - Notification: User 'Alice', a new review has been added for Media ID 1.
+2025-03-18 11:17:20,403 - INFO - Review Details: User 'Bob' reviewed 'Inception' with Rating 4: Pretty good
+2025-03-18 11:17:20,446 - INFO - Notification: User 'Alice', a new review has been added for Media ID 1.
+2025-03-18 11:17:20,446 - INFO - Review Details: User 'Grace' reviewed 'Inception' with Rating 4: On second watch, still great!
+2025-03-18 11:34:47,080 - INFO - Notification: User 'Alice', a new review has been added for Media ID 1.
+2025-03-18 11:34:47,080 - INFO - Review Details: User 'Alice' reviewed 'Inception' with Rating 5: Amazing movie!
+2025-03-18 11:34:47,092 - INFO - Notification: User 'Alice', a new review has been added for Media ID 1.
+2025-03-18 11:34:47,092 - INFO - Review Details: User 'Bob' reviewed 'Inception' with Rating 4: Pretty good
+2025-03-18 11:34:47,160 - INFO - Notification: User 'Alice', a new review has been added for Media ID 1.
+2025-03-18 11:34:47,160 - INFO - Review Details: User 'Grace' reviewed 'Inception' with Rating 4: On second watch, still great!
