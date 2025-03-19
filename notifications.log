@@ -17,3 +17,5 @@
 2025-03-18 11:34:47,092 - INFO - Review Details: User 'Bob' reviewed 'Inception' with Rating 4: Pretty good
 2025-03-18 11:34:47,160 - INFO - Notification: User 'Alice', a new review has been added for Media ID 1.
 2025-03-18 11:34:47,160 - INFO - Review Details: User 'Grace' reviewed 'Inception' with Rating 4: On second watch, still great!
+2025-03-19 09:56:20,680 - INFO - Notification: User 'Alice', a new review has been added for Media ID 1.
+2025-03-19 09:56:20,681 - INFO - Review Details: User 3 reviewed Media 1 with Rating 4: Nice one

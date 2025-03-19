@@ -1,10 +1,30 @@
 import typer
 from db import initialize_db
-from logic import add_user, add_media, list_users, list_media, add_review, list_reviews, get_recommendations, subscribe_user
+from rich.console import Console
+from rich.table import Table
+import ast
 
+
+from logic import (
+    add_user,
+    add_media,
+    list_users,
+    list_media,
+    add_review,
+    list_reviews,
+    get_recommendations,
+    subscribe_user,
+    search_media,
+    get_top_rated_media,
+    add_reviews_multithreaded,
+    get_reviews
+)
 app = typer.Typer()
+console = Console()
 
-@app.command()
+
+
+@app.command("init")
 def init():
     """Initialize the database"""
     initialize_db()
@@ -20,20 +40,25 @@ def create_media(title: str, media_type: str):
     """Add a new media entry (Movie, WebShow, Song)"""
     add_media(title, media_type)
 
-@app.command()
+@app.command("list-users")
 def show_users():
     """List all users"""
     list_users()
 
-@app.command()
+@app.command("list")
 def show_media():
     """List all media"""
     list_media()
 
 @app.command()
-def review_media(user_name: str, media_title: str, rating: int, comment: str):
-    """Command to allow users to review media based on name and title"""
-    add_review(user_name, media_title, rating, comment)
+def search_media_by_title(title: str):
+    """Search for media by title."""
+    search_media(title)
+
+@app.command()
+def review_media(user_id: int, media_id: int, rating: int, comment: str):
+    """Command to allow users to review media based on user ID and media ID"""
+    add_review(user_id, media_id, rating, comment)
 
 
 @app.command()
@@ -41,27 +66,13 @@ def show_reviews():
     """List all reviews"""
     list_reviews()
 
+import ast  # To safely parse the tuple string input
+
+
 @app.command()
-def bulk_review():
-    """Allows users to add multiple reviews interactively"""
-    typer.echo("Enter multiple reviews. Type 'exit' at any point to stop.")
-
-    while True:
-        user_name = typer.prompt("Enter user name (or type 'exit' to stop)")
-        if user_name.lower() == "exit":
-            break
-
-        media_title = typer.prompt("Enter media title")
-        rating = typer.prompt("Enter rating (1-5)", type=int)
-
-        if rating < 1 or rating > 5:
-            typer.echo("Invalid rating. Please enter a number between 1 and 5.")
-            continue
-
-        comment = typer.prompt("Enter your review comment")
-
-        add_review(user_name, media_title, rating, comment)
-
+def top_rated(limit: int = 5):
+    """Get the top-rated media based on reviews."""
+    get_top_rated_media(limit)
 
 @app.command()
 def subscribe(user_name: str, media_title: str):
@@ -69,10 +80,42 @@ def subscribe(user_name: str, media_title: str):
     subscribe_user(user_name, media_title)
 
 @app.command()
-def recommend(user_name: str):
-    """Get top 5 media recommendations for a user."""
-    get_recommendations(user_name)
+def recommend(user_id: int):
+    """Get top 5 media recommendations for a user using their ID."""
+    get_recommendations(user_id)
 
+@app.command()
+def bulk_review(reviews: str):
+    """Add multiple reviews using multi-threading."""
+    try:
+        reviews_list = ast.literal_eval(reviews)  # Convert string input to list
+        if not isinstance(reviews_list, list):
+            raise ValueError
+    except (SyntaxError, ValueError):
+        console.print("[bold red]Invalid input format! Please provide a valid list of tuples.[/bold red]")
+        return
+
+    add_reviews_multithreaded(reviews_list)
+
+@app.command()
+def show_reviews_redis():
+    """Fetch and display reviews (Uses Redis cache)."""
+    reviews = get_reviews()
+    
+    if not reviews:
+        console.print("[bold yellow]No reviews available.[/bold yellow]")
+        return
+
+    table = Table(title="Reviews")
+    table.add_column("User", style="magenta")
+    table.add_column("Media", style="cyan")
+    table.add_column("Rating", style="green")
+    table.add_column("Comment", style="yellow")
+
+    for user, media, rating, comment in eval(reviews):  # Convert string to list
+        table.add_row(user, media, str(rating), comment)
+
+    console.print(table)
 
 @app.command()
 def add_sample_media():

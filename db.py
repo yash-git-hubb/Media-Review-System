@@ -60,3 +60,4 @@ def initialize_db():
         print(f"Database initialization error: {e}")
     finally:
         conn.close()
+

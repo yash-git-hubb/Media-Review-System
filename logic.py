@@ -4,6 +4,7 @@ from rich.table import Table
 from db import get_db_connection
 from models import User, Media
 from threading import *
+from redis_cache import redis_client
 
 console = Console()
 
@@ -126,9 +127,46 @@ def list_media():
         table.add_row(str(media[0]), media[1], media[2])
 
     console.print(table)
+
+def search_media(title: str):
+    """Search for media by title (case-insensitive)."""
+    conn = get_db_connection()
+    if conn is None:
+        return
+
+    try:
+        cursor = conn.cursor()
+        
+        # Case-insensitive search using `LIKE`
+        cursor.execute("SELECT id, title, type FROM media WHERE LOWER(title) LIKE LOWER(?)", (f"%{title}%",))
+        results = cursor.fetchall()
+
+        if not results:
+            console.print(f"[bold yellow]No media found matching '{title}'.[/bold yellow]")
+            return
+        
+        # Display results in a table
+        table = Table(title="Search Results")
+        table.add_column("ID", style="cyan", justify="center")
+        table.add_column("Title", style="magenta", justify="left")
+        table.add_column("Type", style="green", justify="left")
+
+        for media_id, media_title, media_type in results:
+            table.add_row(str(media_id), media_title, media_type)
+
+        console.print(table)
+
+    except Exception as e:
+        console.print(f"[bold red]Database Error: {e}[/bold red]")
+    finally:
+        conn.close()
+
 from threading import Thread
-def add_review(user_name, media_title, rating, comment):
-    """Allows a user to review media based on name and title instead of IDs"""
+console = Console()
+review_lock = Lock()
+
+def add_review(user_id: int, media_id: int, rating: int, comment: str):
+    """Add a review with locking mechanism and Redis cache invalidation."""
     
     if not comment.strip():
         console.print("[bold red]Error: Comment cannot be empty![/bold red]")
@@ -139,45 +177,73 @@ def add_review(user_name, media_title, rating, comment):
         return
 
     conn = get_db_connection()
-    if conn is None:
-        return
+    cursor = conn.cursor()
 
     try:
-        cursor = conn.cursor()
+        with review_lock:  # Ensure thread-safe insertion
+            cursor.execute("INSERT INTO reviews (user_id, media_id, rating, comment) VALUES (?, ?, ?, ?)", 
+                           (user_id, media_id, rating, comment))
+            conn.commit()
+            console.print(f"[bold green]Review added for media ID {media_id} by user ID {user_id}![/bold green]")
 
-        # Fetch user ID from name
-        cursor.execute("SELECT id FROM users WHERE name = ?", (user_name,))
-        user = cursor.fetchone()
-        if not user:
-            console.print(f"[bold red]Error: User '{user_name}' does not exist![/bold red]")
-            return
-        user_id = user[0]
-
-        # Fetch media ID from title
-        cursor.execute("SELECT id FROM media WHERE title = ?", (media_title,))
-        media = cursor.fetchone()
-        if not media:
-            console.print(f"[bold red]Error: Media '{media_title}' does not exist![/bold red]")
-            return
-        media_id = media[0]
-
-        # Insert the review into the database
-        cursor.execute("INSERT INTO reviews (user_id, media_id, rating, comment) VALUES (?, ?, ?, ?)", 
-                       (user_id, media_id, rating, comment))
-        conn.commit()
-        console.print(f"[bold green]Review by '{user_name}' for '{media_title}' added successfully![/bold green]")
-
-        # Prepare review details for notification
-        review_details = f"User '{user_name}' reviewed '{media_title}' with Rating {rating}: {comment}"
-
-        # Notify subscribers in a separate thread
-        notification_thread = Thread(target=notify_subscribers, args=(media_id, review_details))
-        notification_thread.start()
+        # Invalidate Redis cache
+        redis_client.delete("reviews:all")
 
     except sqlite3.Error as e:
         console.print(f"[bold red]Database Error: {e}[/bold red]")
     finally:
         conn.close()
+
+def add_reviews_multithreaded(reviews):
+    """Add multiple reviews using multi-threading."""
+    
+    threads = []
+    for review in reviews:
+        thread = Thread(target=add_review, args=review)
+        threads.append(thread)
+        thread.start()
+
+    for thread in threads:
+        thread.join()
+
+    console.print("[bold blue]All reviews added using multi-threading![/bold blue]")
+
+def get_reviews():
+    """Fetch reviews from Redis cache or DB."""
+    cache_key = "reviews:all"
+
+    cached_reviews = redis_client.get(cache_key)
+    if cached_reviews:
+        console.print("[bold green]Fetching reviews from Redis cache...[/bold green]")
+        return cached_reviews
+
+    console.print("[bold yellow]Fetching reviews from Database...[/bold yellow]")
+    conn = get_db_connection()
+    if not conn:
+        return []
+
+    try:
+        cursor = conn.cursor()
+        cursor.execute("""
+            SELECT users.name, media.title, reviews.rating, reviews.comment
+            FROM reviews
+            JOIN users ON reviews.user_id = users.id
+            JOIN media ON reviews.media_id = media.id
+        """)
+        reviews = cursor.fetchall()
+
+        # Store results in Redis for 5 minutes
+        redis_client.setex(cache_key, 300, str(reviews))  
+
+        return reviews
+
+    except sqlite3.Error as e:
+        console.print(f"[bold red]Database Error: {e}[/bold red]")
+        return []
+    finally:
+        conn.close()
+
+
 
 
 def list_reviews():
@@ -219,19 +285,50 @@ def list_reviews():
         conn.close()
 
 
-def add_multiple_reviews(reviews):
-    """Adds multiple reviews concurrently using multi-threading"""
-    threads = []
 
-    for review in reviews:
-        user_name, media_title, rating, comment = review
-        thread = Thread(target=add_review, args=(user_name, media_title, rating, comment))
-        threads.append(thread)
-        thread.start()
 
-    # Wait for all threads to complete
-    for thread in threads:
-        thread.join()
+def get_top_rated_media(limit=5):
+    """Fetch the top-rated media based on average review ratings."""
+    conn = get_db_connection()
+    if conn is None:
+        return
+
+    try:
+        cursor = conn.cursor()
+        
+        # Fetch media with their average rating
+        cursor.execute("""
+            SELECT media.id, media.title, media.type, 
+                   COALESCE(AVG(reviews.rating), 0) AS avg_rating
+            FROM media
+            LEFT JOIN reviews ON media.id = reviews.media_id
+            GROUP BY media.id
+            ORDER BY avg_rating DESC
+            LIMIT ?
+        """, (limit,))
+        
+        results = cursor.fetchall()
+
+        if not results:
+            console.print("[bold yellow]No media found with ratings.[/bold yellow]")
+            return
+
+        # Display results in a table
+        table = Table(title="Top Rated Media")
+        table.add_column("ID", style="cyan", justify="center")
+        table.add_column("Title", style="magenta", justify="left")
+        table.add_column("Type", style="green", justify="left")
+        table.add_column("Avg Rating", style="yellow", justify="center")
+
+        for media_id, title, media_type, avg_rating in results:
+            table.add_row(str(media_id), title, media_type, f"{avg_rating:.2f}")
+
+        console.print(table)
+
+    except Exception as e:
+        console.print(f"[bold red]Database Error: {e}[/bold red]")
+    finally:
+        conn.close()
 
 
 def subscribe_user(name, title):
@@ -295,7 +392,7 @@ def notify_subscribers(media_id, review_details):
     finally:
         conn.close()
 
-def get_recommendations(user_name: str):
+def get_recommendations(user_id: int):
     """Fetch top 5 media recommendations based on rating and user subscriptions."""
     conn = get_db_connection()
     if conn is None:
@@ -305,12 +402,12 @@ def get_recommendations(user_name: str):
         cursor = conn.cursor()
 
         # Check if user exists
-        cursor.execute("SELECT id FROM users WHERE name = ?", (user_name,))
+        cursor.execute("SELECT name FROM users WHERE id = ?", (user_id,))
         user = cursor.fetchone()
         if not user:
-            console.print(f"[bold red]Error: User '{user_name}' does not exist![/bold red]")
+            console.print(f"[bold red]Error: User ID '{user_id}' does not exist![/bold red]")
             return
-        user_id = user[0]
+        user_name = user[0]
 
         # Get top-rated media (average rating)
         cursor.execute("""
@@ -348,8 +445,7 @@ def get_recommendations(user_name: str):
         # Add top-rated media first
         for title, media_type, avg_rating in top_rated:
             if title not in reviewed_media and title not in seen_titles:
-                recommended_media.append((title, media_type, round(avg_rating, 2) if avg_rating is not None else "N/A"))
-
+                recommended_media.append((title, media_type, round(avg_rating, 2)))
                 seen_titles.add(title)
 
         # Add subscribed media (if not already in recommendations)
@@ -362,11 +458,11 @@ def get_recommendations(user_name: str):
         recommended_media = recommended_media[:5]
 
         if not recommended_media:
-            console.print(f"[bold yellow]No new recommendations for {user_name}.[/bold yellow]")
+            console.print(f"[bold yellow]No new recommendations for User ID {user_id} ({user_name}).[/bold yellow]")
             return
 
         # Display recommendations
-        table = Table(title=f"Top 5 Recommendations for {user_name}")
+        table = Table(title=f"Top 5 Recommendations for {user_name} (ID: {user_id})")
         table.add_column("Media", style="magenta", justify="left")
         table.add_column("Type", style="cyan", justify="left")
         table.add_column("Avg Rating", style="green", justify="center")
