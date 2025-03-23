@@ -189,6 +189,12 @@ def add_review(user_id: int, media_id: int, rating: int, comment: str):
         # Invalidate Redis cache
         redis_client.delete("reviews:all")
 
+        review_details = f"User '{user_id}' reviewed '{media_id}' with Rating {rating}: {comment}"
+
+        # Notify subscribers in a separate thread
+        notification_thread = Thread(target=notify_subscribers, args=(media_id, review_details))
+        notification_thread.start()
+
     except sqlite3.Error as e:
         console.print(f"[bold red]Database Error: {e}[/bold red]")
     finally:
@@ -208,44 +214,6 @@ def add_reviews_multithreaded(reviews):
 
     console.print("[bold blue]All reviews added using multi-threading![/bold blue]")
 
-def get_reviews():
-    """Fetch reviews from Redis cache or DB."""
-    cache_key = "reviews:all"
-
-    cached_reviews = redis_client.get(cache_key)
-    if cached_reviews:
-        console.print("[bold green]Fetching reviews from Redis cache...[/bold green]")
-        return cached_reviews
-
-    console.print("[bold yellow]Fetching reviews from Database...[/bold yellow]")
-    conn = get_db_connection()
-    if not conn:
-        return []
-
-    try:
-        cursor = conn.cursor()
-        cursor.execute("""
-            SELECT users.name, media.title, reviews.rating, reviews.comment
-            FROM reviews
-            JOIN users ON reviews.user_id = users.id
-            JOIN media ON reviews.media_id = media.id
-        """)
-        reviews = cursor.fetchall()
-
-        # Store results in Redis for 5 minutes
-        redis_client.setex(cache_key, 300, str(reviews))  
-
-        return reviews
-
-    except sqlite3.Error as e:
-        console.print(f"[bold red]Database Error: {e}[/bold red]")
-        return []
-    finally:
-        conn.close()
-
-
-
-
 def list_reviews():
     """Displays unique reviews from the database."""
     conn = get_db_connection()
@@ -257,7 +225,7 @@ def list_reviews():
 
         # Fetch unique reviews using JOIN to get user names and media titles
         cursor.execute("""
-            SELECT DISTINCT users.name, media.title, reviews.rating, reviews.comment
+            SELECT  users.name, media.title, reviews.rating, reviews.comment
             FROM reviews
             JOIN users ON reviews.user_id = users.id
             JOIN media ON reviews.media_id = media.id

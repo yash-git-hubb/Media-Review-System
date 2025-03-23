@@ -3,6 +3,7 @@ from db import initialize_db
 from rich.console import Console
 from rich.table import Table
 import ast
+from db import get_reviews 
 
 
 from logic import (
@@ -17,7 +18,7 @@ from logic import (
     search_media,
     get_top_rated_media,
     add_reviews_multithreaded,
-    get_reviews
+    
 )
 app = typer.Typer()
 console = Console()
@@ -99,20 +100,16 @@ def bulk_review(reviews: str):
 
 @app.command()
 def show_reviews_redis():
-    """Fetch and display reviews (Uses Redis cache)."""
-    reviews = get_reviews()
-    
-    if not reviews:
-        console.print("[bold yellow]No reviews available.[/bold yellow]")
-        return
+    """Fetch reviews using Redis as a cache store"""
+    reviews = get_reviews()  # Fetch reviews (Redis or DB)
 
-    table = Table(title="Reviews")
-    table.add_column("User", style="magenta")
-    table.add_column("Media", style="cyan")
+    table = Table(title="Media Reviews")
+    table.add_column("User", style="cyan")
+    table.add_column("Media", style="magenta")
     table.add_column("Rating", style="green")
     table.add_column("Comment", style="yellow")
 
-    for user, media, rating, comment in eval(reviews):  # Convert string to list
+    for user, media, rating, comment in reviews:
         table.add_row(user, media, str(rating), comment)
 
     console.print(table)
@@ -163,57 +160,58 @@ def add_sample_users():
 @app.command()
 def add_sample_reviews():
     """Adds predefined reviews to the database."""
-    sample_reviews = [("Alice", "Inception", 5, "Amazing movie!"),
-        ("Bob", "Inception", 4, "Pretty good"),
-        ("Charlie", "Breaking Bad", 5, "Best TV series ever!"),
-        ("David", "The Matrix", 5, "Mind-blowing sci-fi classic!"),
-        ("Emma", "Interstellar", 5, "A masterpiece of space and time!"),
-        ("Frank", "The Matrix", 4, "Great visuals, complex story."),
-        ("Grace", "Inception", 4, "On second watch, still great!"),
-        ("Henry", "Breaking Bad", 5, "Brilliant writing and acting!"),
-        ("Isabella", "Interstellar", 5, "Emotional and scientifically deep!"),
-        ("Jack", "The Matrix", 5, "Revolutionary sci-fi film!"),
-        ("Kelly", "Titanic", 5, "A heartbreaking love story."),
-        ("Liam", "Avatar", 4, "Visually stunning but predictable plot."),
-        ("Mia", "Fight Club", 5, "An absolute cult classic!"),
-        ("Nathan", "The Dark Knight", 5, "Best portrayal of Joker ever!"),
-        ("Olivia", "The Office", 5, "Funniest show I've ever watched."),
-        ("Peter", "Game of Thrones", 4, "Loved it except for the last season."),
-        ("Quinn", "Sherlock", 5, "Benedict Cumberbatch nailed it!"),
-        ("Rachel", "Friends", 5, "Timeless sitcom, always fun!"),
-        ("Samuel", "Money Heist", 4, "Gripping but dragged in later seasons."),
-        ("Tina", "Stranger Things", 5, "Superb nostalgia and sci-fi mix."),
-        ("Umar", "Dark", 5, "Mind-bending time travel plot!"),
-        ("Victoria", "The Boys", 5, "A fresh take on superheroes!"),
-        ("William", "Bohemian Rhapsody", 5, "A fitting tribute to Freddie Mercury!"),
-        ("Xander", "Shape of You", 4, "Catchy but overplayed."),
-        ("Yara", "Someone Like You", 5, "Adele's voice is just magical."),
-        ("Zane", "Blinding Lights", 5, "Synthwave perfection."),
-        ("Aaron", "Uptown Funk", 4, "Great song to dance to!"),
-        ("Bianca", "Rolling in the Deep", 5, "Powerful vocals and deep lyrics."),
-        ("Carter", "Let It Be", 5, "Timeless classic."),
-        ("Diana", "Hey Jude", 5, "One of The Beatles' best songs."),
-        ("Elliot", "Despacito", 4, "Catchy and international hit."),
-        ("Fiona", "No Time to Die", 5, "Hauntingly beautiful James Bond theme."),
-        ("George", "Havana", 4, "Great Latin pop song."),
-        ("Hazel", "Perfect", 5, "A beautiful wedding song."),
-        ("Ian", "Senorita", 5, "Shawn and Camila's chemistry is great."),
-        ("Jasmine", "Old Town Road", 4, "Weird but surprisingly good!"),
-        ("Kevin", "Lose Yourself", 5, "Eminems best track!"),
-        ("Linda", "Rap God", 5, "Fastest rap ever, insane flow!"),
-        ("Mark", "Smells Like Teen Spirit", 5, "Grunge at its peak."),
-        ("Nina", "Wonderwall", 5, "Oasis best song!"),
-        ("Oscar", "Bohemian Rhapsody", 5, "A rock opera masterpiece."),
-        ("Paula", "Hotel California", 5, "An all-time classic rock song."),
-        ("Quincy", "Sweet Child O' Mine", 5, "Slashs guitar solo is legendary."),
-        ("Rita", "Billie Jean", 5, "Michael Jackson at his best."),
-        ("Steve", "Supernatural", 4, "Great series, but dragged on too long."),
-        ("Tracy", "House of Cards", 5, "Brilliant political drama."),
-        ("Ursula", "The Mandalorian", 5, "Star Wars done right!"),
-        ("Vince", "Westworld", 4, "Intriguing but got too complicated."),
-        ("Wendy", "Black Mirror", 5, "Each episode is mind-blowing."),
-        ("Xavier", "Narcos", 5, "Pablo Escobars story is gripping!"),
-    ]
+    sample_reviews = [
+    (1, 5, 5, "Absolutely amazing!"),
+    (2, 12, 4, "Great movie, really enjoyed it."),
+    (3, 8, 3, "It was decent, but not my favorite."),
+    (4, 19, 2, "Too slow and boring."),
+    (5, 27, 1, "Terrible! Would not recommend."),
+    (6, 33, 5, "Loved every moment!"),
+    (7, 14, 4, "Solid movie with a great story."),
+    (8, 22, 3, "Not bad, but could've been better."),
+    (9, 6, 2, "Disappointed, expected more."),
+    (10, 41, 1, "Worst movie I've ever seen."),
+    (11, 9, 5, "A masterpiece!"),
+    (12, 35, 4, "Very entertaining and well-acted."),
+    (13, 47, 3, "Average, nothing special."),
+    (14, 3, 2, "Felt dragged, not engaging."),
+    (15, 17, 1, "Poor execution and bad acting."),
+    (16, 24, 5, "Brilliantly done, would watch again!"),
+    (17, 28, 4, "Good visuals and story."),
+    (18, 7, 3, "Meh, was okay."),
+    (19, 39, 2, "Cliché and predictable."),
+    (20, 13, 1, "Absolute waste of time."),
+    (21, 45, 5, "Emotional and powerful!"),
+    (22, 18, 4, "Great soundtrack and cinematography."),
+    (23, 31, 3, "Just fine, nothing outstanding."),
+    (24, 20, 2, "Characters were flat and uninteresting."),
+    (25, 49, 1, "Horrible, regretted watching."),
+    (26, 10, 5, "One of the best movies ever!"),
+    (27, 21, 4, "Really well made."),
+    (28, 40, 3, "Some parts were good, others not so much."),
+    (29, 2, 2, "Weak plot, didn't keep me engaged."),
+    (30, 15, 1, "Very bad storyline."),
+    (31, 23, 5, "Superb acting and direction."),
+    (32, 16, 4, "A fun experience!"),
+    (33, 26, 3, "Not bad, but wouldn't watch again."),
+    (34, 30, 2, "Expected more from this movie."),
+    (35, 46, 1, "Ridiculously bad."),
+    (36, 50, 5, "A perfect movie!"),
+    (37, 48, 4, "Had some flaws, but overall good."),
+    (38, 29, 3, "Mediocre at best."),
+    (39, 4, 2, "Acting was weak."),
+    (40, 42, 1, "A total mess."),
+    (41, 34, 5, "So beautiful and touching."),
+    (42, 37, 4, "Quite enjoyable!"),
+    (43, 43, 3, "Could've been better."),
+    (44, 25, 2, "Not my cup of tea."),
+    (45, 36, 1, "Horribly written."),
+    (46, 11, 5, "Perfect in every way!"),
+    (47, 32, 4, "Loved the action scenes."),
+    (48, 38, 3, "It was okay, not bad."),
+    (49, 44, 2, "Forgettable."),
+    (50, 1, 1, "Worst script ever."),
+]
 
     for user, media, rating, comment in sample_reviews:
         review_media(user, media, rating, comment)

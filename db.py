@@ -1,4 +1,7 @@
 import sqlite3
+import redis
+import json
+from redis_cache import redis_client
 
 def get_db_connection():
     try:
@@ -60,4 +63,38 @@ def initialize_db():
         print(f"Database initialization error: {e}")
     finally:
         conn.close()
-
+        
+def fetch_reviews_from_db():
+    """Fetch reviews from SQLite"""
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    
+    cursor.execute("""
+        SELECT users.name, media.title, reviews.rating, reviews.comment 
+        FROM reviews 
+        JOIN users ON reviews.user_id = users.id 
+        JOIN media ON reviews.media_id = media.id
+    """)
+    
+    reviews = cursor.fetchall()  # List of tuples [(user, media, rating, comment), ...]
+    conn.close()
+    
+    return reviews
+def get_reviews():
+    """Get reviews from Redis if available, otherwise fetch from DB and cache it"""
+    cache_key = "reviews"
+    
+    # Check if data exists in Redis
+    cached_reviews = redis_client.get(cache_key)
+    
+    if cached_reviews:
+        print("Fetching reviews from Redis cache...")
+        return json.loads(cached_reviews)
+    
+    print("Fetching reviews from Database...")
+    reviews = fetch_reviews_from_db()
+    
+    # Store in Redis with an expiry of 1 hour 
+    redis_client.setex(cache_key, 3600, json.dumps(reviews))
+    
+    return reviews
